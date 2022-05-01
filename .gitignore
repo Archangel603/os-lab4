@@ -1,0 +1,6 @@
+cmake-build-debug
+client-out
+server-out
+
+!client-out/lab4-client.exe
+!server-out/lab4-client.exe

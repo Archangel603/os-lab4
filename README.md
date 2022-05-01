@@ -1,8 +1,8 @@
-##Disclaimer
+## Disclaimer
 
 Tested on Win11 x64, MSVC 14.29.30133, CMake 3.20.2
 
-##Instructions
+## Instructions
 
 1. Run lab4-server.exe in `server-out/`
 2. Run lab4-client.exe in `client-out/` with argument `0` (text processor) or `1` (calculator)

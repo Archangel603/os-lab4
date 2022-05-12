@@ -1,7 +1,3 @@
-//
-// Created by mikha on 01.05.2022.
-//
-
 #ifndef LAB4_CLIENT_HANDLER_H
 #define LAB4_CLIENT_HANDLER_H
 

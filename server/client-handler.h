@@ -19,6 +19,7 @@ class ClientHandler {
 
 public:
     int socket;
+    bool finished = false;
 
     explicit ClientHandler(int socket, ClientService* clients, EventService* events) {
         this->socket = socket;
@@ -98,6 +99,7 @@ private:
         }
 
         close(this->socket);
+        this->finished = true;
     }
 };
 

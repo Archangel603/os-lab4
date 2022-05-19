@@ -20,7 +20,7 @@ int getAvailableHandlerSlot(ClientHandler** handlers, int count) {
         if (handlers[i] == NULL)
             return i;
 
-        if (!handlers[i]->socket) {
+        if (handlers[i]->finished) {
             handlers[i]->terminate();
             return i;
         }
@@ -38,6 +38,7 @@ void clearHandlers(ClientHandler** handlers, int count) {
 int main() {
     const int connectionsLimit = 1024;
     ClientHandler* handlers[connectionsLimit];
+    clearHandlers(handlers, connectionsLimit);
 
     auto db = new Db("jdbc:mariadb://localhost:3307/lab4", "root", "123456");
     auto clientService = new ClientService(db);

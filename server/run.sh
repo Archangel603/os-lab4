@@ -1,0 +1,1 @@
+./build.sh && ./CMake/lab4-server

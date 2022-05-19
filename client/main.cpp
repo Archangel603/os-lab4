@@ -1,8 +1,14 @@
 #include <iostream>
+#include <pthread.h>
 #include <string>
+#include <unistd.h>
 #include <utility>
-#include <windows.h>
+#include <sys/types.h> 
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
+#define PORT 8080
 #define MESSAGE_TYPE_IDLE 0
 #define MESSAGE_TYPE_START 1
 #define MESSAGE_TYPE_END 2
@@ -14,11 +20,11 @@
 using namespace std;
 
 struct IdleArgs {
-    HANDLE pipe;
+    int socket;
     string name;
 };
 
-void sendStartMessage(HANDLE pipe, string name) {
+void sendStartMessage(int socket, string name) {
     auto message = new PipeMessage();
 
     message->type = MESSAGE_TYPE_START;
@@ -27,11 +33,11 @@ void sendStartMessage(HANDLE pipe, string name) {
     char buffer[128];
     message->writeToBuffer(buffer);
 
-    WriteFile(pipe, buffer, 128, NULL, NULL);
+    send(socket, buffer, 128, 0);
     printf("Sent start message\n");
 }
 
-void sendIdleMessage(HANDLE pipe, string name) {
+void sendIdleMessage(int socket, string name) {
     auto message = new PipeMessage();
 
     message->type = MESSAGE_TYPE_IDLE;
@@ -40,11 +46,11 @@ void sendIdleMessage(HANDLE pipe, string name) {
     char buffer[128];
     message->writeToBuffer(buffer);
 
-    WriteFile(pipe, buffer, 128, NULL, NULL);
+    send(socket, buffer, 128, 0);
     //printf("Sent idle message\n");
 }
 
-void sendTextMessage(HANDLE pipe, string name, string text) {
+void sendTextMessage(int socket, string name, string text) {
     auto message = new PipeMessage();
 
     message->type = MESSAGE_TYPE_TEXT;
@@ -54,11 +60,11 @@ void sendTextMessage(HANDLE pipe, string name, string text) {
     char buffer[1024];
     message->writeToBuffer(buffer);
 
-    WriteFile(pipe, buffer, 1024, NULL, NULL);
+    send(socket, buffer, 1024, 0);
     printf("Sent text message\n");
 }
 
-void sendCalcMessage(HANDLE pipe, string name, string text) {
+void sendCalcMessage(int socket, string name, string text) {
     auto message = new PipeMessage();
 
     message->type = MESSAGE_TYPE_CALC;
@@ -68,11 +74,11 @@ void sendCalcMessage(HANDLE pipe, string name, string text) {
     char buffer[1024];
     message->writeToBuffer(buffer);
 
-    WriteFile(pipe, buffer, 1024, NULL, NULL);
+    send(socket, buffer, 1024, 0);
     printf("Sent calc message\n");
 }
 
-void sendEndMessage(HANDLE pipe, string name) {
+void sendEndMessage(int socket, string name) {
     auto message = new PipeMessage();
 
     message->type = MESSAGE_TYPE_END;
@@ -81,16 +87,16 @@ void sendEndMessage(HANDLE pipe, string name) {
     char buffer[128];
     message->writeToBuffer(buffer);
 
-    WriteFile(pipe, buffer, 128, NULL, NULL);
+    send(socket, buffer, 128, 0);
     printf("Sent end message\n");
 }
 
-DWORD IdleSender(LPVOID data) {
+void* IdleSender(void* data) {
     auto args = (IdleArgs*)data;
 
     while (true) {
-        sendIdleMessage(args->pipe, args->name);
-        Sleep(1000);
+        sendIdleMessage(args->socket, args->name);
+        sleep(1);
     }
 
     return 0;
@@ -100,39 +106,36 @@ int main(int argc, char* args[]) {
     cout << "Connecting to pipe..." << endl;
     // Open the named pipe
     // Most of these parameters aren't very relevant for pipes.
-    HANDLE pipe = CreateFile(
-        "\\\\.\\pipe\\lab4",
-        GENERIC_READ | GENERIC_WRITE, // only need read access
-        0,
-        NULL,
-        OPEN_EXISTING,
-        0,
-        NULL
-    );
-
-    if (pipe == INVALID_HANDLE_VALUE) {
-        wcout << "Failed to connect to pipe." << endl;
-        // look up error code here using GetLastError()
-        system("pause");
-        return 1;
+    int socketConnection = 0, valread, client_fd;
+    struct sockaddr_in serv_addr;
+    if ((socketConnection = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("\n Socket creation error \n");
+        return -1;
+    }
+ 
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(PORT);
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+        printf("\nInvalid address/ Address not supported \n");
+        return -1;
     }
 
     int clientType = atoi(args[1]);
 
     string name = "Client ";
-    name.append(to_string(GetCurrentThreadId()));
+    name.append(to_string(pthread_self()));
 
-    sendStartMessage(pipe, name);
+    if ((client_fd = connect(socketConnection, (struct sockaddr*)&serv_addr, sizeof(serv_addr))) < 0) {
+        printf("\nConnection Failed \n");
+        return -1;
+    }
 
-    IdleArgs idleArgs = { pipe, name };
-    HANDLE idleThread = CreateThread(
-            NULL,
-            0,
-            IdleSender,
-            &idleArgs,
-            0,
-            NULL
-    );
+    sendStartMessage(socketConnection, name);
+
+    IdleArgs idleArgs = { socketConnection, name };
+
+    pthread_t idleThread;
+    pthread_create(&idleThread, NULL, IdleSender, (void*)&idleArgs);
 
     while (true) {
         string payload;
@@ -150,17 +153,16 @@ int main(int argc, char* args[]) {
             break;
 
         if (clientType == 0) {
-            sendTextMessage(pipe, name, payload);
+            sendTextMessage(socketConnection, name, payload);
         }
         else {
-            sendCalcMessage(pipe, name, payload);
+            sendCalcMessage(socketConnection, name, payload);
         }
     }
 
-    sendEndMessage(pipe, name);
+    sendEndMessage(socketConnection, name);
 
-    TerminateThread(idleThread, 0);
-    CloseHandle(idleThread);
-    CloseHandle(pipe);
+    pthread_cancel(idleThread);
+    close(socketConnection);
     return 0;
 }
